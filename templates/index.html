@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocExplain - Medizinische Fachbegriffe Übersetzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Bootstrap JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- PDF Generation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+    <!-- Dark Mode Switch -->
+    <div class="theme-switch">
+        <button class="btn btn-outline-primary" id="themeToggle">
+            <i class="bi bi-moon-stars"></i>
+        </button>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">DocExplain</h1>
+        <p class="text-center text-muted mb-4">Ihr Medizinischer Fachbegriffe Übersetzer</p>
+        
+
+
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="uploadForm" class="mb-4">
+                            <div class="mb-3">
+                                <label for="pdfFile" class="form-label">
+                                    <i class="bi bi-file-earmark-pdf"></i> PDF-Datei auswählen
+                                </label>
+                                <div class="input-group">
+                                    <input type="file" class="form-control" id="pdfFile" accept=".pdf" required>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-translate"></i> Übersetzen
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div class="difficulty-slider">
+                            <label for="difficulty" class="form-label">
+                                <i class="bi bi-sliders"></i> Wissensstand:
+                            </label>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="difficulty-label">
+                                    <i class="bi bi-hospital"></i> Arzt
+                                </span>
+                                <span class="difficulty-label">
+                                    <i class="bi bi-person"></i> Neuling
+                                </span>
+                            </div>
+                            <input type="range" class="form-range custom-range" id="difficulty" min="0" max="1" step="1" value="0">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4><i class="bi bi-file-text"></i> Original Text</h4>
+                                <div id="originalText" class="result-box"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <h4><i class="bi bi-translate"></i> Übersetzter Text</h4>
+                                <div id="translatedText" class="result-box"></div>
+                            </div>
+                        </div>
+
+                        <!-- Download Buttons -->
+                        <div class="text-center mt-4 mb-4">
+                            <button id="downloadBoth" class="btn btn-success me-2" disabled>
+                                <i class="bi bi-file-pdf"></i> Beide Texte als PDF
+                            </button>
+                            <button id="downloadTranslated" class="btn btn-primary" disabled>
+                                <i class="bi bi-file-pdf"></i> Nur Übersetzung als PDF
+                            </button>
+                        </div>
+
+                        <div class="legend mt-4">
+                            <p class="mb-0">
+                                <i class="bi bi-info-circle"></i>
+                                <span class="medical-term">Medizinische Begriffe</span> werden hervorgehoben. 
+                                Bewegen Sie den Mauszeiger über einen Begriff für die Übersetzung.
+                            </p>
+                        </div>
+                        <div class="disclaimer-banner alert alert-info" role="alert">
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                            Hinweis: DocExplain nutzt künstliche Intelligenz zur Übersetzung. Die Ergebnisse dienen nur zur Orientierung und ersetzen keine professionelle medizinische Beratung.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dark Mode Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const icon = themeToggle.querySelector('i');
+
+        themeToggle.addEventListener('click', () => {
+            document.body.dataset.theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+            icon.className = document.body.dataset.theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+        });
+
+        // Funktion für die Übersetzung
+        async function translateText(file, difficulty) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('difficulty', difficulty);
+
+            // Show loading overlay
+            document.querySelector('.loading-overlay').style.display = 'flex';
+
+            try {
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('originalText').textContent = data.original;
+                    document.getElementById('translatedText').innerHTML = data.translated_text;
+                    // Initialisiere Tooltips nach dem Laden des übersetzten Textes
+                    initializeTooltips();
+                    updateDownloadButtons();
+                } else {
+                    alert(data.error || 'Ein Fehler ist aufgetreten.');
+                }
+            } catch (error) {
+                alert('Ein Fehler ist aufgetreten: ' + error.message);
+            } finally {
+                // Hide loading overlay
+                document.querySelector('.loading-overlay').style.display = 'none';
+            }
+        }
+
+        // Globale Variable für die aktuelle Datei
+        let currentFile = null;
+
+        // Form Submit Handler
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('pdfFile');
+            const difficulty = document.getElementById('difficulty').value;
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Bitte wählen Sie eine PDF-Datei aus.');
+                return;
+            }
+
+            currentFile = file;
+            await translateText(file, difficulty);
+        });
+
+        // Schwierigkeitsgrad Change Handler
+        document.getElementById('difficulty').addEventListener('change', async (e) => {
+            if (currentFile) {
+                const difficulty = e.target.value;
+                await translateText(currentFile, difficulty);
+            }
+        });
+
+        // PDF Generation Functions
+        async function generatePDF(originalText, translatedText, filename, includeOriginal = true) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'p',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            // Hilfsfunktion zum Hinzufügen von Text mit Zeilenumbruch
+            function addWrappedText(text, y, maxWidth = 170) {
+                const lines = doc.splitTextToSize(text, maxWidth);
+                doc.text(lines, 20, y);
+                return y + (lines.length * 7);
+            }
+
+            // Funktion zum Hinzufügen des Headers
+            function addHeader() {
+                doc.setFont("helvetica");
+                doc.setFontSize(24);
+                doc.setTextColor(25, 118, 210);
+                doc.text('DocExplain', doc.internal.pageSize.width / 2, 20, { align: 'center' });
+                
+                doc.setFontSize(14);
+                doc.setTextColor(102, 102, 102);
+                doc.text('Medizinische Fachbegriffe Übersetzer', doc.internal.pageSize.width / 2, 30, { align: 'center' });
+
+                // Datum
+                doc.setFontSize(10);
+                const date = new Date().toLocaleDateString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                doc.text(`Generiert am: ${date}`, doc.internal.pageSize.width - 20, 40, { align: 'right' });
+
+                return 50; // Rückgabe der Y-Position nach dem Header
+            }
+
+            // Erste Seite mit Header
+            let yPosition = addHeader();
+
+            // Original Text (wenn gewünscht)
+            if (includeOriginal) {
+                doc.setFontSize(16);
+                doc.setTextColor(25, 118, 210);
+                doc.text('Original Text', 20, yPosition);
+                
+                doc.setFontSize(12);
+                doc.setTextColor(0, 0, 0);
+                yPosition = addWrappedText(originalText, yPosition + 10) + 10;
+            }
+
+            // Neue Seite für übersetzten Text
+            doc.addPage();
+            yPosition = addHeader(); // Header auf der neuen Seite
+
+            // Übersetzter Text
+            doc.setFontSize(16);
+            doc.setTextColor(25, 118, 210);
+            doc.text('Übersetzter Text', 20, yPosition);
+
+            // Extrahiere medizinische Begriffe und ihre Erklärungen
+            const medTerms = {};
+            const translatedDOM = document.createElement('div');
+            translatedDOM.innerHTML = translatedText;
+            translatedDOM.querySelectorAll('.medical-term').forEach(term => {
+                medTerms[term.textContent] = term.title;
+            });
+
+            // Füge übersetzten Text hinzu
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            const cleanText = translatedText.replace(/<[^>]+>/g, '');
+            yPosition = addWrappedText(cleanText, yPosition + 10) + 10;
+
+            // Glossar auf neuer Seite
+            if (Object.keys(medTerms).length > 0) {
+                doc.addPage();
+                yPosition = addHeader();
+                
+                doc.setFontSize(16);
+                doc.setTextColor(25, 118, 210);
+                doc.text('Glossar der medizinischen Begriffe', 20, yPosition);
+
+                doc.setFontSize(12);
+                doc.setTextColor(0, 0, 0);
+                let glossaryY = yPosition + 20;
+                
+                for (const [term, explanation] of Object.entries(medTerms)) {
+                    // Prüfen, ob genug Platz auf der aktuellen Seite ist
+                    if (glossaryY > doc.internal.pageSize.height - 30) {
+                        doc.addPage();
+                        glossaryY = addHeader() + 10;
+                    }
+                    
+                    doc.setFont("helvetica", "bold");
+                    doc.text(term, 20, glossaryY);
+                    doc.setFont("helvetica", "normal");
+                    glossaryY = addWrappedText(explanation, glossaryY + 7) + 7;
+                }
+            }
+
+            // Rechtliche Hinweise auf neuer Seite
+            doc.addPage();
+            yPosition = addHeader();
+            
+            doc.setFontSize(14);
+            doc.setTextColor(25, 118, 210);
+            doc.text('Wichtige Hinweise', 20, yPosition);
+
+            doc.setFontSize(10);
+            doc.setTextColor(102, 102, 102);
+            const disclaimers = [
+                '• Diese Übersetzung wurde durch künstliche Intelligenz generiert und dient ausschließlich Informationszwecken.',
+                '• Die Übersetzungen und Erklärungen ersetzen keine professionelle medizinische Beratung oder Diagnose.',
+                '• Bitte konsultieren Sie bei medizinischen Fragen immer qualifiziertes Fachpersonal.',
+                '• DocExplain übernimmt keine Gewähr für die Richtigkeit und Vollständigkeit der bereitgestellten Informationen.'
+            ];
+
+            let disclaimerY = yPosition + 10;
+            disclaimers.forEach(text => {
+                disclaimerY = addWrappedText(text, disclaimerY) + 5;
+            });
+
+            // Footer mit Seitenzahlen
+            const pageCount = doc.internal.getNumberOfPages();
+            doc.setFontSize(8);
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.text(
+                    `© ${new Date().getFullYear()} DocExplain | Seite ${i} von ${pageCount}`,
+                    doc.internal.pageSize.width / 2,
+                    doc.internal.pageSize.height - 10,
+                    { align: 'center' }
+                );
+            }
+
+            // PDF speichern
+            doc.save(filename);
+        }
+
+        // Enable/disable download buttons based on content
+        function updateDownloadButtons() {
+            const hasContent = document.getElementById('translatedText').innerHTML.trim() !== '';
+            document.getElementById('downloadBoth').disabled = !hasContent;
+            document.getElementById('downloadTranslated').disabled = !hasContent;
+        }
+
+        // Download handlers
+        document.getElementById('downloadBoth').addEventListener('click', async () => {
+            const original = document.getElementById('originalText').textContent;
+            const translated = document.getElementById('translatedText').innerHTML;
+            await generatePDF(original, translated, 'DocExplain_Komplett.pdf', true);
+        });
+
+        document.getElementById('downloadTranslated').addEventListener('click', async () => {
+            const translated = document.getElementById('translatedText').innerHTML;
+            await generatePDF('', translated, 'DocExplain_Übersetzung.pdf', false);
+        });
+
+        // Nach der bestehenden JavaScript-Funktion translateText
+        function initializeTooltips() {
+            const medicalTerms = document.querySelectorAll('.medical-term');
+            medicalTerms.forEach(term => {
+                term.setAttribute('data-bs-toggle', 'tooltip');
+                term.setAttribute('data-bs-placement', 'top');
+            });
+        }
+
+        // Füge Bootstrap Tooltip Initialisierung hinzu
+        document.addEventListener('DOMContentLoaded', function() {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        });
+    </script>
+</body>
+</html> 
